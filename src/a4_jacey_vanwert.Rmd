@@ -1,0 +1,254 @@
+---
+title: "Juvenile Snowshoe Hares in Bonanza Creek Experimental Forest"
+author: "Jacey Van Wert"
+date: "11/13/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(ggpubr)
+library(lubridate)
+library(janitor)
+library(here)
+library(ggbeeswarm)
+library(kableExtra)
+library(effsize)
+library(broom)
+```
+
+## 1. Overview
+
+This report investigates differences in juvenile snowshoe hare (*Lepus americanus*) sizes in males and females across three capture sites in the Tanana valley of Alaska, from 1999 - 2012 (Kielland *et al.* 2017). Weights are compared between juvenile male and juvenile females, and the relationship between hindfoot length and body mass is explored. Concerns with tests are stated and next steps for analyses are offered. 
+
+## 2. Data and methods
+
+Capture-recapture studies of snowshoe hares were conducted in Alaska in the Bonanza Creek Long Term Ecological Research (LTER) network site from 1999 to 2012 by Kielland and colleagues (Kielleand *et al.* 2017). A total of 3197 observations were made across three different trapping grids from 1999 - 2012. Exploratory data visualization was folowed by a two sample t-test to compare differences between juvenile male and juvenile female snowshoe hare weights. Differences between sexes are described by Cohen's *d* effect size. Additionally, the relationship between hind foot length and body mass is explored using simple linear regression. All tests used a significance level ($\alpha$) of 0.05 throughout. Data analyses are in R version 4.0.3. using RStudio version 1.2.1335 (RStudio Team 2020).
+
+
+```{r, include=FALSE}
+hares <- read_csv(here("data","bonanza_hares.csv"))
+```
+
+
+## 3. Preliminary Results
+
+### A. Annual juvenile hare trap counts
+
+```{r, include=FALSE, echo=FALSE}
+hares_year<-hares %>% 
+   mutate(date_new = mdy(date)) %>% 
+  mutate(year = year(date_new)) 
+
+juv <- hares %>% 
+  mutate(date_new = mdy(date)) %>% 
+  mutate(year = year(date_new)) %>% 
+  filter(age == "j")
+  
+juv_count <- juv %>% 
+  group_by(year) %>% 
+  count()
+```
+
+
+```{r, echo=FALSE, fig.align = "center"}
+ggplot(juv_count, aes(x = year,y = n))+
+  geom_line(color="cadetblue",size=1)+
+  geom_point(size=3,color="cadetblue4")+
+  theme_bw()+
+  labs(y= "Number of juvenile hare trappings", x = "Year")
+```
+
+**Figure 1.** Total juvenile snowshoe hare trappings in Bonanza Creek Experimental Forest by year, from 1999-2012. Data: Kielland *et al.* (2017).
+
+Overall, total snowshoe hare trappings at Bonanza Creek Experimental Forest have declined, with a maximum of 126 trappings in 1999 to a minimum of 2 trappings in 2010 (Figure 1). The annual number of juvenile hares trapped is a mean of ~32 snowshoe hares per year, or a median of ~19 snowshoe hares per year. By 2012, rates were down to 6 caught in that year. Though these data suggest snowshoe hares are being trapped less, the number of caught snowshoe hares should be divided by the number of traps and days to standardize for effort in future analyses. Additionally, it should be noted that some hares were caught but not identified to juveniles or adults and that data is not incorporated here.
+
+
+### B. Juvenile hare weights
+
+
+```{r, include=FALSE, echo=FALSE}
+hares_juvs <-  hares %>% 
+  filter(age == "j") %>% 
+   mutate(Sex = case_when( # Add a new column season, which contains... 
+    sex %in% c("f") ~ "Female", # "winter" if month is 12, 1 or 2
+    sex %in% c("m") ~ "Male")) %>% 
+   mutate(site = case_when( # Add a new column season, which contains... 
+    grid %in% c("bonrip") ~ "Bonrip", # "winter" if month is 12, 1 or 2
+    grid %in% c("bonmat") ~ "Bonmat",
+    grid %in% c("bonbs") ~ "Bonbs"))
+
+  
+weights <- hares_juvs %>% 
+  group_by(Sex,site) %>% 
+  summarise(
+    mean_weight = mean(weight,na.rm=TRUE),
+    sd_weight = sd(weight,na.rm=TRUE),
+    n = n())
+
+```
+
+
+
+
+```{r, fig.align = "center"}
+ggplot(data = hares_juvs, aes(x = Sex, y = weight))+
+  geom_beeswarm(data = hares_juvs, 
+                aes(color=Sex),
+                size = 3,
+                alpha = 0.5)+
+ geom_boxplot(fill = NA, width = 0.2, outlier.color = NA) +
+  stat_summary(fun=mean, 
+               geom="point", 
+               shape=20, 
+               size=4, 
+               color="black", 
+               fill="black") +
+  facet_wrap(~site)+
+  theme_light()+
+  labs(x = "\nSex", y = "Weight (g)")
+  #scale_color_manual(values=c("#cc9e75","#75ccbc","#cc758a"), name = "Site")
+```
+
+**Figure 2.** Juvenile snowshoe hare weights (g) by sex across each grid site (Bonbs, Bonmat, Bonrip), with mean (black) and standard deviations as error bars. Pink (female), blue (male), and gray) points indicate observations for weight (g) of juvenile showshoe hares. NA indicates weights (g) for hares not identified to sex. Data: Kielland *et al.* (2017).
+
+Weights (g) of juvenile snowshoe hares were compared across three grid sites for females, males, and hares not gendered. Time of year are not included, but should be considered moving forward. Distributions of weights for both sexes had some skew, with males generally skewed towards larger weights and females skewed towards smaller weights. There were subtle differences in mean and median values and a few outliers in Bonbs and Bonrip. Finally, the snowshoe hares that were not gendered do not have normal distributions.
+
+
+### C. Juvenile hare weight comparison
+
+**Table 1.** Descriptive statistics (mean, standard deviation, and sample size) for the weights (g) of male and female juvenile snowshoe hares across all three sites. NA is a third row indicating hares not identified to sex. Data: Kielland *et al.* (2017).
+
+```{r, echo=FALSE}
+weights_sex <- hares_juvs %>% 
+  group_by(Sex) %>% 
+  summarise(
+    mean_weight = mean(weight,na.rm=TRUE),
+    sd_weight = sd(weight,na.rm=TRUE),
+    n = n())
+
+weights_sex %>% 
+  kable(col.names = c("Sex", "Mean weight(g)", "Standard deviation (g)", "Sample size")) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+
+```{r, include = FALSE}
+# T-test code: 
+
+# Pull vectors of flipper lengths for male & female gentoo penguins
+hares_f <- hares_juvs %>% 
+  filter(sex == "f") %>% 
+  pull(weight)
+
+hares_m <- hares_juvs %>% 
+  filter(sex == "m") %>% 
+  pull(weight)
+
+#check assumptions
+#Histogram
+ggplot(hares_juvs, aes(x=weight))+
+  geom_histogram()+
+  facet_wrap(~sex) #concern over male (bimodal?) and NA values (low N) not looking normal
+#QQ plot
+ggplot(hares_juvs, aes(sample = weight))+
+  geom_qq()+
+  facet_wrap(~sex) #females relatively linear, males some odd trend at lower weights, NA not enough samples to say but seems a bit irregular
+
+#Is there a significant difference in body mass between male and female snowshoe hares? 
+hare_ttest <- t.test(hares_f, hares_m)
+hare_ttest
+
+# Get the tidy model results to call outputs in-line: 
+hare_ttest_tidy <- tidy(hare_ttest)
+
+# Get the means & SDs for each: 
+male_mean <- mean(hares_m)
+female_mean <- mean(hares_f,na.rm=TRUE)
+male_sd <- sd(hares_m)
+female_sd <- sd(hares_f,na.rm=TRUE)
+
+
+#Effect size
+hare_effsize <-cohen.d(hares_f, hares_m,na.rm=TRUE)
+```
+
+
+On average, juvenile male snowshoe hares are larger than juvenile female snowshoe hares (`r round(male_mean,2)` $\pm$ `r round(male_sd, 2)` and `r round(female_mean,2)` $\pm$ `r round(female_sd, 2)` g, respectively; mean $\pm$ 1 standard deviation). While the absolute difference in means is `r round(male_mean, 2) - round(female_mean, 2)` g (a `r round((male_mean - female_mean)/((male_mean + female_mean)/2)*100, 2)`% difference), the difference in means is significant (Welch's two-sample t-test: t(`r round(hare_ttest_tidy$parameter,2)`) = `r round(hare_ttest_tidy$statistic,2)`, p < 0.01), and the effect size is small (Cohen's *d* = `r round(hare_effsize$estimate,2)`).
+
+
+### D. Relationship between juvenile hare body mass & hind foot length
+
+The relationship between hind foot length (mm) and body mass (g) was explored across the three sites (i.e., ignoring sex); further analysis is needed to compare the relationship between hind foot length and body mass at each site, and should also include sex as an additional variable. 
+
+```{r, fig.align = "center"}
+ggplot(hares_juvs, aes( y = weight, x = hindft))+
+  geom_point(size = 2,color="cadetblue4") +
+  theme_light()+
+  labs(y = "Body mass (g)", x = "\nHind foot length (mm)")
+```
+
+**Figure 3.** Relationship between hind foot length (mm) and body mass (g) for juvenile snowshoe hares across all three sites. Data: Kielland *et al.* (2017). 
+
+```{r, include = FALSE}
+# Linear model, stored as hare_lm
+hare_lm <- lm(weight ~ hindft, data = hares_juvs)
+
+# Return the complete overview:
+summary(hare_lm)
+
+
+# Check assumptions
+plot(hare_lm)# QQ plot indicates non-normal data, residuals appear to have some non-random pattern
+
+# Tidy version of output:
+hare_lm_tidy <- broom::tidy(hare_lm)
+
+# Get the intercept: 
+hare_int <- hare_lm_tidy$estimate[1]
+hare_int
+
+# Then to get the coefficient:
+hare_coef <- hare_lm_tidy$estimate[2]
+hare_coef
+
+#clean 
+hare_lm_out <- broom::glance(hare_lm)
+hare_lm_out
+
+# Get Pearson's r correlation
+hare_cor <- cor.test(hares_juvs$hindft, hares_juvs$weight)
+hare_cor
+
+# Tidy version of correlation output:
+hare_cor_tidy <- tidy(hare_cor)
+```
+
+
+Simple linear regression was used to explore the relationship between juvenile showshoe hare hind foot length (mm) and body mass (g) pooled across all three sites, and including both male and female juvenile snowshoe hares. A significant regression model was found ($\beta$ = `r round(hare_coef,3)`, F(`r hare_lm_out$df`,`r hare_lm_out$df.residual`) = `r round(hare_lm_out$statistic,1)`, p < 0.001) with an R^2^ of `r round(hare_lm_out$r.squared,3)` with a strong positive correlation between snowshoe hare hind foot length and body mass(*r* = `r round(hare_cor$estimate,2)`, t(`r hare_cor$parameter`) = `r round(hare_cor$statistic,2)`, p < 0.001). Importantly, this data might not suit a linear regression because it might not pass the assumptions because the data is not normally distributed. 
+
+
+## 4. Summary
+
+The exploratory data analysis reveals some initial findings:
+
+- Snowshoe hare trappings generally largely declined over time from 1999 to 2012
+- Juvenile snowshoe hares are larger in body mass than juvenile females from all three sites, with a significant difference between males and females pooled across sites
+- Hind foot length appears linearly related with body mass across juvenile snowshoe hares; the relationship (by simple linear regression) is significant but weak, with a slope (expected average increase in body mass with a 1 mm increase in hind foot length) of `r round(hare_lm_tidy$estimate[2], 2)` g mm^-1^. 
+
+Next steps:
+
+- Multiple linear regression to understand the relationship between site, sex, body mass and time of year 
+- Examine size distribution (both by hind foot length and weight) across years, across sites, and/or across sex
+
+
+## 5. Citations
+
+Kielland, K., F.S. Chapin, R.W. Ruess, and Bonanza Creek LTER. 2017. Snowshoe hare physical data in Bonanza Creek Experimental Forest: 1999-Present ver 22. *Environmental Data Initiative.* URL [https://doi.org/10.6073/pasta/03dce4856d79b91557d8e6ce2cbcdc14](https://doi.org/10.6073/pasta/03dce4856d79b91557d8e6ce2cbcdc14)
+
+
+RStudio Team. RStudio: Integrated Development for R. 2020. RStudio, PBC, Boston, MA URL [http://www.rstudio.com/](http://www.rstudio.com/).
+
+
+
